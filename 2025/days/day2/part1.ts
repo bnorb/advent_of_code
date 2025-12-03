@@ -1,0 +1,9 @@
+import { parseInput } from "./lib/parse";
+
+const ranges = parseInput(`${__dirname}/input.txt`);
+
+console.log(
+  ranges
+    .map((range) => range.getInvalidSum())
+    .reduce((sum, partialSum) => sum + partialSum, 0)
+);
