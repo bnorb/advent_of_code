@@ -92,7 +92,7 @@ function runDay() {
   day=$2
 
   [[ $PART == "all" ]] || [ "$PART" -eq "1" ] && ./run.sh $day 1
-  [[ $PART == "all" ]] || [ "$PART" -eq "2" ] && ./run.sh $day 2
+  [[ $PART == "all" ]] || [ "$PART" -eq "2" ] && [ "$day" -lt "25" ] && ./run.sh $day 2
 }
 
 function runYear() {
