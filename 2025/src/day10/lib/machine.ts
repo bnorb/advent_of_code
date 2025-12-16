@@ -1,3 +1,5 @@
+import { ConstraintType, SimplexSolver, VariableType, type Constraint, type Solution, type Variable } from "./simplex";
+
 export class Machine {
   private readonly desiredLights: boolean[];
   private readonly buttons: number[][];
@@ -83,92 +85,83 @@ export class Machine {
     return -1;
   }
 
-  // not good
   public findJoltagePresses(): number {
-    const maxJoltage = Math.max(...this.desiredJoltage);
-    const hash = (joltage: number[]): number =>
-      joltage.reduce(
-        (h, count, index) => h + count * Math.pow(maxJoltage + 1, index),
-        0
-      );
+    const objective = Array(this.buttons.length).fill(1)
+    const constraints: Constraint[] = this.desiredJoltage.map((joltage, rowIndex) => ({
+      coefficients: this.buttons.map(b => b.includes(rowIndex) ? 1 : 0),
+      rhs: joltage,
+      type: ConstraintType.EQ
+    }))
 
-    const pressButton = (joltage: number[], button: number[]): number[] => {
-      let buttonIdx = 0;
+    const solver = new SimplexSolver(objective, constraints, true)
+    const solution = solver.solve()
 
-      return joltage.map((count, index) => {
-        if (buttonIdx < button.length && index === button[buttonIdx]) {
-          buttonIdx++;
-          return count + 1;
-        }
-
-        return count;
-      });
-    };
-
-    const isTarget = (joltage: number[]): boolean => {
-      return joltage.every(
-        (count, index) => count === this.desiredJoltage[index]
-      );
-    };
-
-    const filterButtons = (
-      joltage: number[],
-      buttons: number[][]
-    ): number[][] => {
-      let usableButtons = [...buttons];
-      joltage.forEach((count, index) => {
-        if (count < this.desiredJoltage[index]!) {
-          return;
-        }
-
-        usableButtons = usableButtons.filter(
-          (targets) => !targets.some((t) => t === index)
-        );
-      });
-
-      return usableButtons;
-    };
-
-    const start = Array(this.desiredJoltage.length).fill(0);
-    const q: [number[], number, number[][]][] = [[start, 0, [...this.buttons]]];
-    const seen = new Set([hash(start)]);
-
-    let safety = 0;
-    while (q.length > 0) {
-      const [joltage, buttonPresses, usableButtons] = q.shift()!;
-      if (safety++ > 100) {
-        return -1;
-      }
-
-      for (let button of usableButtons) {
-        const newJoltage = pressButton(joltage, button);
-        const h = hash(newJoltage);
-
-        if (seen.has(h)) {
-          continue;
-        }
-
-        console.log(
-          `${[joltage, buttonPresses]} + ${button} -> ${[
-            newJoltage,
-            buttonPresses + 1,
-          ]}`
-        );
-        seen.add(h);
-
-        if (isTarget(newJoltage)) {
-          console.log(buttonPresses + 1);
-          return buttonPresses + 1;
-        }
-
-        q.push([
-          newJoltage,
-          buttonPresses + 1,
-          filterButtons(newJoltage, usableButtons),
-        ]);
-      }
+    if (this.isIntegerSolution(solution)) {
+      return this.getSum(solution)
     }
 
-    return -1;
+    return this.findIntegerSolution(solution, objective, constraints)
+  }
+
+  private findIntegerSolution(currentSolution: Solution, objective: number[], currentConstraints: Constraint[]): number {
+    const epsilon = 0.0000001
+
+    const maxDecimalIndex = currentSolution.basis
+      .map((b, i) => [b, i] as [Variable, number])
+      .filter(([b]) => b.type === VariableType.Regular)
+      .map(([_, i]) => [currentSolution.rhs[i]!, i])
+      .filter(([v]) => Math.abs(Math.round(v!) - v!) > epsilon) // get rid of ints with float errors
+      .map(([v, i]) => [v! - Math.trunc(v!), i!])
+      .reduce(([max, maxIndex], [v, i]) => v! > max! ? [v!, i!] : [max!, maxIndex!], [0, -1])[1]!
+
+    const branchVar = currentSolution.basis[maxDecimalIndex]!
+    const branches = [
+      { type: ConstraintType.LTE, rhs: Math.floor(currentSolution.rhs[maxDecimalIndex]!) },
+      { type: ConstraintType.GTE, rhs: Math.ceil(currentSolution.rhs[maxDecimalIndex]!) }
+    ]
+
+    let results: number[] = []
+    for (const { type, rhs } of branches) {
+      let newConstraint: Constraint = {
+        type,
+        rhs,
+        coefficients: Array(objective.length).fill(0)
+      }
+      newConstraint.coefficients[branchVar.index]! = 1
+      const newConstraints = [...currentConstraints, newConstraint]
+
+      const solver = new SimplexSolver(objective, newConstraints, true)
+
+      let newSolution: Solution
+      try {
+        newSolution = solver.solve()
+      } catch {
+        // no solution, not continuing on this branch
+        continue;
+      }
+
+      if (this.isIntegerSolution(newSolution)) {
+        results.push(this.getSum(newSolution))
+        continue
+      }
+
+      // need to explore further branches
+      results.push(this.findIntegerSolution(newSolution, objective, newConstraints))
+    }
+
+    if (!results.length) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    return results.reduce((min, v) => Math.min(min, v))
+  }
+
+  private isIntegerSolution(solution: Solution): boolean {
+    const epsilon = 0.0000001
+    return solution.rhs.every(v => Math.abs(Math.round(v) - v) < epsilon)
+  }
+
+  private getSum(solution: Solution): number {
+    return -1 * solution.basis.reduce((sum, v, index) => sum + v.coefficient * Math.round(solution.rhs[index]!), 0)
   }
 }
