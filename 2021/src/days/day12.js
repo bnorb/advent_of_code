@@ -1,61 +1,112 @@
-const buildAdjacencyMap = (adjacencies) => {
+function parseInput(input) {
   const smallCaves = new Set();
+  const adjacencyMap = new Map();
 
-  const adjacencyMap = adjacencies.reduce((map, line) => {
-    const [nodeA, nodeB] = line.split("-");
-    const listA = map.get(nodeA) || [];
-    const listB = map.get(nodeB) || [];
-    listA.push(nodeB);
-    listB.push(nodeA);
-    map.set(nodeA, listA);
-    map.set(nodeB, listB);
+  const addTransition = (from, to) => {
+    if (from === "end" || to === "start") {
+      return;
+    }
 
-    if (nodeA != "end" && nodeA == nodeA.toLowerCase()) {
-      smallCaves.add(nodeA);
+    if (!adjacencyMap.has(from)) {
+      adjacencyMap.set(from, []);
     }
-    if (nodeB != "end" && nodeB == nodeB.toLowerCase()) {
-      smallCaves.add(nodeB);
+
+    adjacencyMap.get(from).push(to);
+
+    if (from !== "start" && from === from.toLowerCase()) {
+      smallCaves.add(from);
     }
-    return map;
-  }, new Map());
+  };
+
+  input
+    .trimEnd()
+    .split("\n")
+    .forEach((line) => {
+      const [cave1, cave2] = line.split("-");
+      addTransition(cave1, cave2);
+      addTransition(cave2, cave1);
+    });
 
   return [adjacencyMap, smallCaves];
-};
+}
 
-const countSmallCaveVisits = (adjacencies) => {
-  const [adjacencyMap, smallCaves] = buildAdjacencyMap(adjacencies);
+export function part1(input) {
+  const [adjacencyMap, smallCaves] = parseInput(input);
 
   let counter = 0;
-  const stack = [["start", new Set(["start"])]];
+  const visited = new Set(["start"]);
 
-  while (stack.length) {
-    const current = stack.pop();
-
-    if (current[0] == "end") {
+  const dfs = (curr) => {
+    if (curr === "end") {
       counter++;
-      continue;
+      return;
     }
 
-    stack.push(
-      ...adjacencyMap
-        .get(current[0])
-        .filter((node) => !current[1].has(node))
-        .map((node) => {
-          let set = new Set([...current[1]]);
-          if (smallCaves.has(node)) {
-            set.add(node);
-          }
-          return [node, set];
-        })
-    );
-  }
+    if (!adjacencyMap.has(curr)) {
+      return;
+    }
 
+    for (const next of adjacencyMap.get(curr).filter((n) => !visited.has(n))) {
+      if (smallCaves.has(next)) {
+        visited.add(next);
+      }
+
+      dfs(next);
+
+      visited.delete(next);
+    }
+  };
+
+  dfs("start");
   return counter;
-};
+}
 
-const countPaths = (adjacencies) => {
-  const [adjacencyMap, smallCaves] = buildAdjacencyMap(adjacencies);
+export function part2(input) {
+  const [adjacencyMap, smallCaves] = parseInput(input);
 
+  let counter = 0;
+  let canRepeat = true;
+  const visited = new Set(["start"]);
+
+  const dfs = (curr) => {
+    if (curr === "end") {
+      counter++;
+      return;
+    }
+
+    if (!adjacencyMap.has(curr)) {
+      return;
+    }
+
+    const neighbors = adjacencyMap
+      .get(curr)
+      .filter((n) => !visited.has(n) || canRepeat);
+
+    for (const next of neighbors) {
+      let didRepeat = false;
+      if (smallCaves.has(next)) {
+        if (visited.has(next)) {
+          canRepeat = false;
+          didRepeat = true;
+        }
+        visited.add(next);
+      }
+
+      dfs(next);
+
+      if (didRepeat) {
+        canRepeat = true;
+      } else {
+        visited.delete(next);
+      }
+    }
+  };
+
+  dfs("start");
+  return counter;
+}
+
+const countPaths = (adjacencyMap, smallCaves) => {
   let counter = 0;
 
   const stack = [["start", new Set(["start"]), true]];
@@ -92,17 +143,3 @@ const countPaths = (adjacencies) => {
 
   return counter;
 };
-
-function parseInput(input) {
-  return input.split("\n").filter((input) => input.length);
-}
-
-export function part1(input) {
-  const adjacencies = parseInput(input);
-  return countSmallCaveVisits(adjacencies);
-}
-
-export function part2(input) {
-  const adjacencies = parseInput(input);
-  return countPaths(adjacencies);
-}
