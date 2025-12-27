@@ -1,5 +1,4 @@
 target/
-input/
 *.log
 day25.dot
 day25.svg
