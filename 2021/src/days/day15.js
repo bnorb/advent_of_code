@@ -1,84 +1,85 @@
 class MinHeap {
   constructor() {
-    this.heap = [null];
+    this.heap = [];
   }
 
-  getMin() {
-    return this.heap[1];
+  _swap(indexA, indexB) {
+    const a = this.heap[indexA];
+    this.heap[indexA] = this.heap[indexB];
+    this.heap[indexB] = a;
+  }
+
+  size() {
+    return this.heap.length;
   }
 
   insert(node) {
     this.heap.push(node);
 
-    if (this.heap.length > 1) {
-      let current = this.heap.length - 1;
+    if (this.heap.length === 1) {
+      return; // nothing to do
+    }
 
-      while (
-        current > 1 &&
-        this.heap[Math.floor(current / 2)][1] > this.heap[current][1]
-      ) {
-        [this.heap[Math.floor(current / 2)], this.heap[current]] = [
-          this.heap[current],
-          this.heap[Math.floor(current / 2)],
-        ];
-        current = Math.floor(current / 2);
-      }
+    let currIndex = this.heap.length - 1;
+    let parentIndex = Math.floor((currIndex - 1) / 2);
+
+    while (currIndex > 0 && this.heap[parentIndex].v > this.heap[currIndex].v) {
+      this._swap(currIndex, parentIndex);
+      currIndex = parentIndex;
+      parentIndex = Math.floor((currIndex - 1) / 2);
     }
   }
 
-  remove() {
-    let smallest = this.heap[1];
-
-    if (this.heap.length > 2) {
-      this.heap[1] = this.heap[this.heap.length - 1];
-      this.heap.splice(this.heap.length - 1);
-
-      if (this.heap.length === 3) {
-        if (this.heap[1][1] > this.heap[2][1]) {
-          [this.heap[1], this.heap[2]] = [this.heap[2], this.heap[1]];
-        }
-        return smallest;
-      }
-
-      let current = 1;
-      let leftChildIndex = current * 2;
-      let rightChildIndex = current * 2 + 1;
-
-      while (
-        this.heap[leftChildIndex] &&
-        this.heap[rightChildIndex] &&
-        (this.heap[current][1] > this.heap[leftChildIndex][1] ||
-          this.heap[current][1] > this.heap[rightChildIndex][1])
-      ) {
-        if (this.heap[leftChildIndex][1] < this.heap[rightChildIndex][1]) {
-          [this.heap[current], this.heap[leftChildIndex]] = [
-            this.heap[leftChildIndex],
-            this.heap[current],
-          ];
-          current = leftChildIndex;
-        } else {
-          [this.heap[current], this.heap[rightChildIndex]] = [
-            this.heap[rightChildIndex],
-            this.heap[current],
-          ];
-          current = rightChildIndex;
-        }
-
-        leftChildIndex = current * 2;
-        rightChildIndex = current * 2 + 1;
-      }
-    } else if (this.heap.length === 2) {
-      this.heap.splice(1, 1);
-    } else {
-      return null;
+  pop() {
+    if (this.heap.length < 1) {
+      return undefined;
     }
 
-    return smallest;
+    const min = this.heap[0];
+    const last = this.heap.pop();
+
+    if (this.heap.length === 0) {
+      return min;
+    }
+
+    let currIndex = 0;
+    this.heap[currIndex] = last;
+    while (true) {
+      let leftIndex = 2 * currIndex + 1;
+      let rigthIndex = 2 * currIndex + 2;
+
+      let smallest = currIndex;
+      if (
+        leftIndex < this.heap.length &&
+        this.heap[leftIndex].v < this.heap[smallest].v
+      ) {
+        smallest = leftIndex;
+      }
+
+      if (
+        rigthIndex < this.heap.length &&
+        this.heap[rigthIndex].v < this.heap[smallest].v
+      ) {
+        smallest = rigthIndex;
+      }
+
+      if (smallest === currIndex) {
+        break;
+      }
+
+      this._swap(currIndex, smallest);
+      currIndex = smallest;
+    }
+
+    return min;
   }
 }
 
 const getLowRiskPath = (grid) => {
-  const getNeighbors = (x, y, width, height) => {
+  const WIDTH = grid[0].length;
+  const HEIGHT = grid.length;
+
+  const getNeighbors = ([x, y]) => {
     const n = [
       [x - 1, y],
       [x + 1, y],
@@ -88,48 +89,70 @@ const getLowRiskPath = (grid) => {
 
     return n.filter(
       (point) =>
-        point[0] < height && point[0] >= 0 && point[1] < width && point[1] >= 0
+        point[0] < HEIGHT && point[0] >= 0 && point[1] < WIDTH && point[1] >= 0
     );
   };
 
-  const dijkstra = (distances, width, height, grid) => {
-    const unvisited = new Set();
-    const heap = new MinHeap();
-    heap.insert(["0_0", 0]);
+  const hash = ([r, c]) => r * (WIDTH + 1) + c;
+  const heuristic = ([r, c]) => WIDTH - (c + 1) + HEIGHT - (r + 1);
 
-    for (let i = 0; i < height; i++) {
-      for (let j = 0; j < width; j++) {
-        unvisited.add(`${i}_${j}`);
+  const aStar = () => {
+    const cameFrom = new Map();
+    const buildPath = () => {
+      const path = [];
+      let curr = [HEIGHT - 1, WIDTH - 1];
+      let h = hash(curr);
+      while (cameFrom.has(h)) {
+        path.push([...curr]);
+        curr = cameFrom.get(h);
+        h = hash(curr);
       }
-    }
 
-    let i = 1;
-    while (unvisited.size > 0) {
-      let [vertex, distance] = heap.getMin();
-      unvisited.delete(vertex);
-      heap.remove();
+      return path.reverse();
+    };
 
-      if (vertex != null) {
-        vertex = vertex.split("_").map((i) => parseInt(i, 10));
-        getNeighbors(...vertex, width, height).forEach((n) => {
-          const localDistance = distance + grid[n[0]][n[1]];
-          const nHash = `${n[0]}_${n[1]}`;
-          if (
-            localDistance < (distances.get(nHash) || Number.POSITIVE_INFINITY)
-          ) {
-            distances.set(nHash, localDistance);
-            heap.insert([nHash, localDistance]);
-          }
-        });
+    const open = new MinHeap();
+    const visited = new Set();
+    const fMap = new Map();
+    const gMap = new Map();
+    open.insert({ d: [0, 0], v: 0 });
+    gMap.set(hash([0, 0]), 0);
+    fMap.set(hash([0, 0]), heuristic([0, 0]));
+
+    while (open.size() > 0) {
+      const node = open.pop();
+      const curr = node.d;
+      if (curr[0] === HEIGHT - 1 && curr[1] === WIDTH - 1) {
+        return buildPath();
       }
-      i++;
+
+      const currHash = hash(curr);
+      visited.add(currHash);
+
+      for (const n of getNeighbors(curr)) {
+        const nHash = hash(n);
+
+        if (visited.has(nHash)) {
+          continue;
+        }
+
+        const g = gMap.get(currHash) + grid[n[0]][n[1]];
+        if (g >= gMap.get(nHash) ?? Number.MAX_SAFE_INTEGER) {
+          continue;
+        }
+
+        const h = heuristic(n);
+        gMap.set(nHash, g);
+        fMap.set(nHash, g + h);
+        cameFrom.set(nHash, curr);
+
+        open.insert({ d: n, v: g + h });
+      }
     }
   };
 
-  const distances = new Map([["0_0", 0]]);
-  dijkstra(distances, grid[0].length, grid.length, grid);
-
-  return distances.get(`${grid.length - 1}_${grid[0].length - 1}`);
+  const path = aStar();
+  return path.reduce((s, [r, c]) => s + grid[r][c], 0);
 };
 
 const enlargeGrid = (grid) => {
